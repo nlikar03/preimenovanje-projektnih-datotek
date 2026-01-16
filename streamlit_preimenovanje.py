@@ -52,7 +52,6 @@ MAPNA_STRUKTURA = {
 # Page config
 st.set_page_config(
     page_title="Preimenovanje Projektnih Datotek",
-    page_icon="📁",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -91,6 +90,10 @@ st.markdown("""
     }
     .stButton>button {
         width: 100%;
+    }
+    .dalux-button > button {
+        background-color: #28a745 !important;
+        color: white !important;
     }
     .upload-section {
         background: #f8f9fa;
@@ -279,7 +282,7 @@ st.markdown('<div class="main-header"><h1>📁 Preimenovanje Projektnih Datotek<
 
 if not st.session_state.projekt_started:
     # Show project setup screen
-    st.markdown("## 🚀 Začni nov projekt")
+    st.markdown("## Začni nov projekt")
     st.markdown("---")
     
     col_left, col_center, col_right = st.columns([1, 2, 1])
@@ -321,7 +324,7 @@ if not st.session_state.projekt_started:
                         selected = st.selectbox(
                             "Izberi projekt:",
                             options=[""] + list(project_options.keys()),
-                            format_func=lambda x: "⚠️ Izberi projekt..." if x == "" else x,
+                            format_func=lambda x: "Izberi projekt..." if x == "" else x,
                             key="project_selector"
                         )
                         
@@ -350,7 +353,7 @@ if not st.session_state.projekt_started:
                             st.rerun()
                         
                         if not selected:
-                            st.info("👆 Izberi projekt iz seznama")
+                            st.info("Izberi projekt iz seznama")
                     else:
                         st.warning("Ni najdenih projektov")
                         
@@ -364,9 +367,9 @@ if not st.session_state.projekt_started:
                 st.warning("⚠️ Dalux modul ni na voljo")
         
         elif dalux_api_key:
-            st.info("👆 Klikni 'Naloži projekte' za nadaljevanje")
+            st.info("Klikni 'Naloži projekte' za nadaljevanje")
         else:
-            st.info("👆 Vnesi API ključ za začetek")
+            st.info("Vnesi API ključ za začetek")
     
     st.stop()
 
@@ -395,7 +398,7 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.header("🔌 Dalux status")
+    st.header("Dalux status")
 
     if st.session_state.projekt_started and st.session_state.dalux_project_id:
         st.success("✅ Povezan z Dalux")
@@ -733,6 +736,7 @@ if st.session_state.files:
             else:
                 st.info(f"📤 Naložil bom {complete_files} datotek v Dalux projekt: {st.session_state.projekt_sifra}")
                 
+                st.markdown('<div class="dalux-button">', unsafe_allow_html=True)
                 if st.button("☁️ NALOŽI V DALUX", type="primary", use_container_width=True):
                     results = upload_to_dalux()
                     
@@ -748,6 +752,7 @@ if st.session_state.files:
                                     st.success(f"✅ {detail['file']} → {detail['folder']}")
                                 else:
                                     st.error(f"❌ {detail['file']}: {detail['error']}")
+                st.markdown('</div>', unsafe_allow_html=True)
     
     elif complete_files > 0:
         st.warning(f"⚠️ {incomplete_files} datotekam še manjkajo podatki. Izpolni vse, da lahko preneseš ZIP ali naloži v Dalux.")
@@ -772,4 +777,3 @@ else:
 
 # Footer
 st.markdown("---")
-st.caption("📁 Preimenovanje Projektnih Datotek v2.2 | Made with Streamlit")
