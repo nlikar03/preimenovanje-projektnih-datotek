@@ -191,7 +191,7 @@ def upload_to_dalux():
         # Upload using project_id
         with st.spinner("Nalagam datoteke v Dalux..."):
             results = manager.bulk_upload_from_structure(
-                st.session_state.projekt_sifra,  # Changed from projekt_sifra
+                st.session_state.projekt_sifra,  
                 files_dict
             )
         
