@@ -1,0 +1,338 @@
+"""
+Dalux API Backend Service
+Handles authentication and API calls to Dalux
+"""
+import requests
+import json
+from typing import Dict, List, Optional, Tuple
+import io
+
+
+class DaluxAPIClient:
+    def __init__(self, api_key: str, base_url: str = "https://node2.field.dalux.com/service/api"):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.headers = {
+            "X-API-KEY": api_key,
+            "Accept": "application/json"
+        }
+    
+    def get_all_projects(self) -> List[Dict]:
+        """
+        Get all available projects
+        Returns list of projects with projectId, projectName, number, etc.
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/5.1/projects",
+                headers=self.headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("items", [])
+        except requests.RequestException as e:
+            raise Exception(f"Failed to get projects: {str(e)}")
+    
+    def find_project_by_number(self, project_number: str) -> Optional[Dict]:
+        """
+        Find project by number (šifra projekta)
+        Returns project dict with projectId if found
+        """
+        projects = self.get_all_projects()
+        
+        for project in projects:
+            project_data = project.get("data", {})
+            if project_data.get("number") == project_number:
+                return project_data
+        
+        return None
+    
+    def get_file_areas(self, project_id: str) -> List[Dict]:
+        """
+        Get all file areas for a project
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/5.1/projects/{project_id}/file_areas",
+                headers=self.headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("items", [])
+        except requests.RequestException as e:
+            raise Exception(f"Failed to get file areas: {str(e)}")
+    
+    def get_folders(self, project_id: str, file_area_id: str) -> List[Dict]:
+        """
+        Get all folders in a file area
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/5.1/projects/{project_id}/file_areas/{file_area_id}/folders",
+                headers=self.headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("items", [])
+        except requests.RequestException as e:
+            raise Exception(f"Failed to get folders: {str(e)}")
+    
+    def get_folder_by_path(self, project_id: str, file_area_id: str, folder_path: str) -> Optional[Dict]:
+        folders = self.get_folders(project_id, file_area_id)
+        
+
+        target_name = folder_path.split('/')[-1]
+
+        for folder in folders:
+            folder_data = folder.get("data", {})
+            # LOOK HERE: We changed "name" to "folderName"
+            if folder_data.get("folderName") == target_name:
+                return folder_data
+                
+        return None
+    
+    def create_upload_slot(self, project_id: str, file_area_id: str) -> str:
+        """
+        Create upload slot and return uploadGuid
+        """
+        try:
+            response = requests.post(
+                f"{self.base_url}/1.0/projects/{project_id}/file_areas/{file_area_id}/upload",
+                headers=self.headers,
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["data"]["uploadGuid"]
+        except requests.RequestException as e:
+            raise Exception(f"Failed to create upload slot: {str(e)}")
+    
+    def upload_file_content(self, project_id: str, file_area_id: str, 
+                           upload_guid: str, file_content: bytes, 
+                           filename: str) -> bool:
+        """
+        Upload file content in chunks
+        """
+        try:
+            file_size = len(file_content)
+            
+            # For simplicity, upload in one chunk
+            # For large files, you'd split into multiple chunks
+            response = requests.post(
+                f"{self.base_url}/1.0/projects/{project_id}/file_areas/{file_area_id}/upload/{upload_guid}",
+                headers={
+                    **self.headers,
+                    "Content-Disposition": f'form-data; filename="{filename}"',
+                    "Content-Range": f"bytes 0-{file_size-1}/{file_size}",
+                    "Content-Type": "application/octet-stream"
+                },
+                data=file_content,
+                timeout=60
+            )
+            response.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            raise Exception(f"Failed to upload file content: {str(e)}")
+    
+    def finalize_upload(self, project_id: str, file_area_id: str, 
+                       upload_guid: str, filename: str, 
+                       folder_id: str, file_type: str = "document") -> Dict:
+        """
+        Finalize the upload
+        """
+        try:
+            response = requests.post(
+                f"{self.base_url}/2.0/projects/{project_id}/file_areas/{file_area_id}/upload/{upload_guid}/finalize",
+                headers={
+                    **self.headers,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "fileName": filename,
+                    "fileType": file_type,
+                    "folderId": folder_id
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            raise Exception(f"Failed to finalize upload: {str(e)}")
+    
+    def upload_complete_file(self, project_id: str, file_area_id: str,
+                            folder_id: str, filename: str, 
+                            file_content: bytes) -> Dict:
+        """
+        Complete file upload process: create slot -> upload -> finalize
+        """
+        # Step 1: Create upload slot
+        upload_guid = self.create_upload_slot(project_id, file_area_id)
+        
+        # Step 2: Upload content
+        self.upload_file_content(project_id, file_area_id, upload_guid, 
+                                file_content, filename)
+        
+        # Step 3: Finalize
+        result = self.finalize_upload(project_id, file_area_id, upload_guid, 
+                                      filename, folder_id)
+        
+        return result
+    
+    def get_or_create_folder(self, project_id: str, file_area_id: str,
+                            folder_path: str) -> str:
+        """
+        Get folder ID by path, or create if doesn't exist
+        Returns folderId
+        """
+        # Try to find existing folder
+        folder = self.get_folder_by_path(project_id, file_area_id, folder_path)
+        
+        if folder:
+            return folder.get("folderId")
+        
+        # If not found, you'd need to implement folder creation
+        # This depends on Dalux API having a create folder endpoint
+        raise Exception(f"Folder not found: {folder_path}. Please create it manually in Dalux.")
+
+
+class DaluxUploadManager:
+    """
+    High-level manager for uploading files to Dalux
+    """
+    def __init__(self, api_key: str):
+        self.client = DaluxAPIClient(api_key)
+        self.project_cache = {}
+    
+    def setup_project(self, project_number: str) -> Tuple[str, str]:
+        """
+        Setup project by finding projectId and default file area
+        Returns (project_id, file_area_id)
+        """
+        # Find project
+        project = self.client.find_project_by_number(project_number)
+        if not project:
+            raise Exception(f"Project not found with number: {project_number}")
+        
+        project_id = project["projectId"]
+        
+        # Get file areas
+        file_areas = self.client.get_file_areas(project_id)
+        if not file_areas:
+            raise Exception(f"No file areas found for project {project_number}")
+        
+        # Use first file area (or you could let user select)
+        file_area_id = file_areas[0]["data"]["fileAreaId"]
+        
+        # Cache for later use
+        self.project_cache[project_number] = {
+            "project_id": project_id,
+            "file_area_id": file_area_id,
+            "project_name": project["projectName"]
+        }
+        
+        return project_id, file_area_id
+    
+    def upload_file_to_folder(self, project_number: str, folder_path: str,
+                             filename: str, file_content: bytes) -> Dict:
+        """
+        Upload a single file to a specific folder
+        """
+        # Get or setup project
+        if project_number not in self.project_cache:
+            self.setup_project(project_number)
+        
+        cache = self.project_cache[project_number]
+        project_id = cache["project_id"]
+        file_area_id = cache["file_area_id"]
+        
+        # Get folder ID
+        folder_id = self.client.get_or_create_folder(
+            project_id, file_area_id, folder_path
+        )
+        
+        # Upload file
+        result = self.client.upload_complete_file(
+            project_id, file_area_id, folder_id, filename, file_content
+        )
+        
+        return result
+    
+    def bulk_upload_from_structure(self, project_number: str, 
+                                   files_dict: Dict[str, List[Tuple[str, bytes]]]) -> Dict:
+        """
+        Upload multiple files organized by folder
+        
+        files_dict format:
+        {
+            "01_POGODBA_ADMIN/02_Pogodba": [
+                ("filename1.pdf", file_content_bytes),
+                ("filename2.pdf", file_content_bytes)
+            ],
+            "02_PROJEKTNA_DOK/01_IDZ": [
+                ("filename3.dwg", file_content_bytes)
+            ]
+        }
+        
+        Returns dict with success/failure counts and details
+        """
+        results = {
+            "success": 0,
+            "failed": 0,
+            "details": []
+        }
+        
+        # Setup project once
+        if project_number not in self.project_cache:
+            self.setup_project(project_number)
+        
+        # Upload each file
+        for folder_path, files in files_dict.items():
+            for filename, file_content in files:
+                try:
+                    result = self.upload_file_to_folder(
+                        project_number, folder_path, filename, file_content
+                    )
+                    results["success"] += 1
+                    results["details"].append({
+                        "file": filename,
+                        "folder": folder_path,
+                        "status": "success",
+                        "result": result
+                    })
+                except Exception as e:
+                    results["failed"] += 1
+                    results["details"].append({
+                        "file": filename,
+                        "folder": folder_path,
+                        "status": "failed",
+                        "error": str(e)
+                    })
+        
+        return results
+
+
+# Example usage
+if __name__ == "__main__":
+    # Initialize
+    API_KEY = "your-api-key-here"
+    manager = DaluxUploadManager(API_KEY)
+    
+    # Setup project
+    project_number = "V/1-1028_29 2TIR"
+    project_id, file_area_id = manager.setup_project(project_number)
+    print(f"Project setup: {project_id}, File Area: {file_area_id}")
+    
+    # Upload single file
+    with open("test.pdf", "rb") as f:
+        content = f.read()
+    
+    result = manager.upload_file_to_folder(
+        project_number,
+        "01_POGODBA_ADMIN/02_Pogodba",
+        "test-document.pdf",
+        content
+    )
+    print("Upload result:", result)
