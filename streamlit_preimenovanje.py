@@ -91,10 +91,6 @@ st.markdown("""
     .stButton>button {
         width: 100%;
     }
-    .dalux-button > button {
-        background-color: #28a745 !important;
-        color: white !important;
-    }
     .upload-section {
         background: #f8f9fa;
         padding: 2rem;
@@ -736,7 +732,7 @@ if st.session_state.files:
             else:
                 st.info(f"📤 Naložil bom {complete_files} datotek v Dalux projekt: {st.session_state.projekt_sifra}")
                 
-                st.markdown('<div class="dalux-button">', unsafe_allow_html=True)
+                
                 if st.button("☁️ NALOŽI V DALUX", type="primary", use_container_width=True):
                     results = upload_to_dalux()
                     
@@ -752,7 +748,6 @@ if st.session_state.files:
                                     st.success(f"✅ {detail['file']} → {detail['folder']}")
                                 else:
                                     st.error(f"❌ {detail['file']}: {detail['error']}")
-                st.markdown('</div>', unsafe_allow_html=True)
     
     elif complete_files > 0:
         st.warning(f"⚠️ {incomplete_files} datotekam še manjkajo podatki. Izpolni vse, da lahko preneseš ZIP ali naloži v Dalux.")
