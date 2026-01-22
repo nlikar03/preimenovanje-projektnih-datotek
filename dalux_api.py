@@ -30,9 +30,13 @@ class DaluxAPIClient:
         projects = self.get_all_projects()
         
         for project in projects:
-            project_data = project.get("data", {})
-            if project_data.get("number") == project_number:
-                return project_data
+            # The API returns a list of objects where the actual info is inside a 'data' key
+            inner_data = project.get("data", {})
+            
+            # Check if 'number' exists and matches
+            # Using .strip() helps if there are hidden spaces in the project number
+            if str(inner_data.get("number")).strip() == str(project_number).strip():
+                return inner_data
         
         return None
     
