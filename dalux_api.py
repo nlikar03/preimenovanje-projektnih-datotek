@@ -14,30 +14,30 @@ class DaluxAPIClient:
         }
     
     def get_all_projects(self) -> List[Dict]:
-        try:
-            response = requests.get(
-                f"{self.base_url}/5.1/projects",
-                headers=self.headers,
-                timeout=30
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data.get("items", [])
-        except requests.RequestException as e:
-            raise Exception(f"Failed to get projects: {str(e)}")
+        response = requests.get(
+            f"{self.base_url}/5.1/projects",
+            headers=self.headers,
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        # ⬇️ SAMO projekti ki imajo data.number
+        return [
+            p for p in data.get("items", [])
+            if "data" in p and "number" in p["data"]
+        ]
     
     def find_project_by_number(self, project_number: str) -> Optional[Dict]:
         projects = self.get_all_projects()
-        
+
         for project in projects:
-            # The API returns a list of objects where the actual info is inside a 'data' key
-            inner_data = project.get("data", {})
-            
-            # Check if 'number' exists and matches
-            # Using .strip() helps if there are hidden spaces in the project number
-            if str(inner_data.get("number")).strip() == str(project_number).strip():
-                return inner_data
-        
+            data = project.get("data")
+            if not data:
+                continue
+            if data.get("number") == project_number:
+                return data
+
         return None
     
     def get_file_areas(self, project_id: str) -> List[Dict]:

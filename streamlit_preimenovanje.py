@@ -313,8 +313,9 @@ if not st.session_state.projekt_started:
                     if projects:
                         # Create options for selectbox
                         project_options = {
-                            f"{p['data']['number']} - {p['data']['projectName']}": p['data']
+                            f"{p['data'].get('number', '???')} - {p['data'].get('projectName', 'Brez imena')}": p['data']
                             for p in projects
+                            if 'data' in p and 'number' in p['data']
                         }
                         
                         selected = st.selectbox(
